@@ -1,0 +1,165 @@
+Neighbor Cell RCA Analysis Algorithm
+Objective
+To determine whether an anomalous cell issue is:
+Cell-level
+Site-level / Infrastructure-related
+Traffic congestion-related
+Low-confidence due to missing data
+by analyzing spatial neighbors within a temporal observation window.
+
+Inputs
+1.Dataset 
+dataset containing records with fields:
+
+Field	          Description	               Used in Algorithm
+
+timestamp	      Measurement time	           Window filtering
+record_id	      Unique record identifier	   Reference only
+cell_id	          Cell identifier	           Primary key
+site_id	          Physical site ID	           Contextual RCA
+technology	      LTE / NR / etc	           Optional filtering
+vendor	          Equipment vendor	           Optional analysis
+bandwidth	      Channel bandwidth	           Context only
+capacity	      Maximum capacity	           Context only
+neighbors	      Neighbor cell list	       Alternative neighbor source
+active_users	  Connected users	           Congestion context
+prb_dl	          Downlink PRB utilization (%) Load metric
+prb_ul	          Uplink PRB utilization (%)   Optional
+sinr	          Signal quality	           Optional RCA extension
+rsrp	          Signal strength	           Optional RCA extension
+throughput_dl	  Downlink throughput	       Optional
+throughput_ul	  Uplink throughput	           Optional
+call_attempts	  Total call attempts	       Optional KPI
+call_success	  Successful calls	           Optional KPI
+ran_dcr	Drop      call rate	                   Optional degradation KPI
+ran_afr	Access    failure rate	               Optional degradation KPI
+availability	  Cell availability (%)	       Health metric
+is_anomaly	      Anomaly flag	               RCA trigger
+
+2 Anomalous Record A
+Single record identified as anomalous:
+A = (cell_id, timestamp)
+
+3 Neighbor Map N
+Mapping of serving cell → neighboring cells.
+Example:
+CELL-027 → [CELL-026, CELL-028, CELL-029]
+
+4 Parameters
+Parameter	    Value	Description
+window_minutes	10	    Temporal analysis window
+records_limit	10	    Maximum records per neighbor
+
+Algorithm
+Step 1 — Dataset Preparation
+Load dataset.
+Convert timestamps into datetime format.
+Validate required columns:
+[cell_id, timestamp, prb_dl, availability, is_anomaly]
+
+Step 2 — Neighbor Identification
+Given anomalous cell:
+C_anomaly = A.cell_id
+T_anomaly = A.timestamp
+Retrieve neighbors:
+Neighbors = N[C_anomaly]
+If no neighbors exist:
+Neighbor Status = Unknown
+Terminate analysis
+
+Step 3 — Temporal Neighbor Data Extraction
+Define analysis window:
+T_start = T_anomaly − window_minutes
+For each neighbor cell Ci:
+Filter dataset:
+Ci records where:
+    cell_id == Ci
+    AND T_start ≤ timestamp ≤ T_anomaly
+Sort by newest timestamp.
+Select last records_limit entries.
+Classification:
+If records exist → valid neighbor dataset
+If empty → mark as missing neighbor
+
+Step 4 — Combine Neighbor Records
+Merge all valid neighbor datasets:
+Neighbor Dataset = UNION(all neighbor records)
+If combined dataset is empty:
+Neighbor Status = Unknown
+Terminate analysis
+
+Step 5 — Compute Key Metrics
+Metric 1 — Average Neighbor PRB (DL)
+Measures surrounding traffic load.
+Avg_PRB =
+    mean(prb_dl)
+Metric 2 — Average Neighbor Availability
+Measures service health around anomaly.
+Avg_Availability =
+    mean(availability)
+Metric 3 — Neighbor Anomaly Count
+Indicates anomaly propagation.
+Neighbor_Anomaly_Count =
+    count(is_anomaly == True)
+Metric 4 — Data Completeness
+Missing_Neighbors =
+    neighbors without records   
+
+Step 6 — Neighbor Status Classification
+Decision rules:
+1. Unknown
+IF no neighbor data available
+2. Partial Data
+IF some neighbors missing
+3. Congested
+IF Avg_PRB ≥ 80%
+Interpretation: high traffic load.   
+4. Degraded
+IF Avg_Availability < 95%
+Interpretation: service degradation.
+5. Normal
+IF Availability ≥ 95%
+AND PRB < 80%
+Interpretation: neighbors healthy. 
+
+Step 7 — RCA Interpretation Logic
+
+Neighbor Status	     Root Cause Interpretation
+
+Normal	             Issue isolated to anomalous cell
+Degraded	         Possible site-level or infrastructure failure
+Congested	         Traffic overload or traffic shift
+Partial Data	     Reduced RCA confidence
+Unknown	             Insufficient information
+
+Step 8 — Output Generation
+
+The algorithm returns structured RCA output:
+
+{
+  anomaly_cell,
+  analysis_time,
+  neighbors_checked,
+  missing_neighbors,
+  avg_neighbor_prb_dl,
+  avg_neighbor_availability,
+  neighbor_anomaly_count,
+  neighbor_status,
+  rca_interpretation
+}
+
+High-Level Algorithm Flow:-----
+
+Detect Anomaly
+        ↓
+Find Neighbor Cells
+        ↓
+Collect Neighbor Time Window Data
+        ↓
+Merge Neighbor Records
+        ↓
+Compute Metrics
+        ↓
+Classify Neighbor Health
+        ↓
+Generate RCA Interpretation
